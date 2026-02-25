@@ -239,13 +239,16 @@ async function startServer() {
                 function notifyOpener() {
                   if (window.opener) {
                     console.log('Notifying opener...');
-                    window.opener.postMessage({ 
+                    window.opener.postMessage({
                       type: 'OAUTH_AUTH_SUCCESS',
                       sessionId: '${req.sessionID}',
                       bridgeId: '${bridgeId}'
                     }, '*');
-                    // Delay closing to ensure message is sent
                     setTimeout(() => window.close(), 1500);
+                  } else {
+                    // Mobile: no opener (was a redirect, not a popup)
+                    // Redirect back to app
+                    window.location.href = '${origin}';
                   }
                 }
                 // Try immediately

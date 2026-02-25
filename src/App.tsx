@@ -201,12 +201,18 @@ export default function App() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
   const handleConnectGoogle = async () => {
     try {
       const origin = window.location.origin;
       const res = await fetch(`/api/auth/google/url?origin=${encodeURIComponent(origin)}`);
       const { url } = await res.json();
-      window.open(url, 'google_oauth', 'width=600,height=700');
+      if (isMobile) {
+        window.location.href = url; // Redirect on mobile (popups are blocked)
+      } else {
+        window.open(url, 'google_oauth', 'width=600,height=700');
+      }
     } catch (e) {
       console.error('Failed to get auth url', e);
     }
