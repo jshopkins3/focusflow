@@ -142,7 +142,18 @@ async function startServer() {
   });
 
   app.get("/auth/google/callback", async (req, res) => {
-    const { code, state } = req.query;
+    const { code, state, error: googleError } = req.query;
+
+    // If Google sent an error instead of a code
+    if (googleError) {
+      console.error(`Google OAuth error: ${googleError}`);
+      return res.status(400).send(`Google OAuth error: ${googleError}`);
+    }
+    if (!code) {
+      console.error('No authorization code received');
+      return res.status(400).send('No authorization code received from Google');
+    }
+
     let origin = process.env.APP_URL || '';
     let bridgeId = '';
 
@@ -246,9 +257,10 @@ async function startServer() {
           </html>
         `);
       });
-    } catch (error) {
-      console.error('Error getting tokens:', error);
-      res.status(500).send('Authentication failed');
+    } catch (error: any) {
+      console.error('Error getting tokens:', error?.response?.data || error?.message || error);
+      const detail = error?.response?.data?.error_description || error?.message || 'Unknown error';
+      res.status(500).send(`Authentication failed: ${detail}`);
     }
   });
 
