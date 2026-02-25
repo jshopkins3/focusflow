@@ -112,7 +112,7 @@ async function startServer() {
     name: 'focusflow.sid',
     cookie: {
       secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' as const : 'lax' as const,
+      sameSite: 'lax' as const,
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
   }));
@@ -122,10 +122,16 @@ async function startServer() {
 
   // Google Auth Routes
   app.get("/api/auth/google/url", (req, res) => {
-    const origin = req.query.origin as string || process.env.APP_URL || 'http://localhost:3000';
+    const origin = process.env.APP_URL || req.query.origin as string || 'http://localhost:3000';
     const bridgeId = Math.random().toString(36).substring(2, 15);
-    
-    const client = createOAuthClient(req);
+
+    const redirectUri = `${origin.replace(/\/$/, '')}/auth/google/callback`;
+    const client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri
+    );
+    console.log(`[Auth URL] Using redirect URI: ${redirectUri}`);
     const url = client.generateAuthUrl({
       access_type: 'offline',
       scope: SCOPES,
