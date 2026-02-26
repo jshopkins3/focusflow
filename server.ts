@@ -83,6 +83,25 @@ db.exec(`
   );
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    content TEXT,
+    platform TEXT,
+    status TEXT DEFAULT 'Draft',
+    scheduled_date TEXT,
+    hashtags TEXT,
+    notes TEXT,
+    connected_goal_id INTEGER,
+    connected_project_id INTEGER,
+    user_email TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (connected_goal_id) REFERENCES goals(id),
+    FOREIGN KEY (connected_project_id) REFERENCES projects(id)
+  );
+`);
+
 // Safe migrations - add columns if they don't exist
 const migrations = [
   'ALTER TABLE tasks ADD COLUMN user_email TEXT',
@@ -379,26 +398,6 @@ async function startServer() {
     next();
   };
 
-  // Debug auth endpoint (temporary)
-  app.get("/api/debug-auth", (req, res) => {
-    const apiKey = cleanEnv(process.env.FOCUSFLOW_API_KEY);
-    const userEmail = cleanEnv(process.env.FOCUSFLOW_USER_EMAIL);
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
-    res.json({
-      hasApiKeyEnv: !!apiKey,
-      apiKeyLength: apiKey?.length || 0,
-      apiKeyFirst4: apiKey?.slice(0, 4) || null,
-      hasUserEmail: !!userEmail,
-      hasAuthHeader: !!authHeader,
-      authHeaderValue: authHeader?.slice(0, 15) || null,
-      tokenLength: token?.length || 0,
-      tokenFirst4: token?.slice(0, 4) || null,
-      match: token === apiKey,
-      deployVersion: "v2-debug"
-    });
-  });
-
   // Current user info
   app.get("/api/auth/me", (req, res) => {
     if (!(req as any).session?.userEmail) {
@@ -648,6 +647,47 @@ async function startServer() {
     ).run(today, mood, gratitude || '', userEmail);
     const reflection = db.prepare("SELECT * FROM reflections WHERE date = ? AND user_email = ?").get(today, userEmail);
     res.json(reflection);
+  });
+
+  // ========== Post Routes ==========
+  app.get("/api/posts", requireAuth, (req, res) => {
+    const userEmail = (req as any).session.userEmail;
+    const posts = db.prepare(`
+      SELECT posts.*, goals.name as goal_name, projects.name as project_name
+      FROM posts
+      LEFT JOIN goals ON posts.connected_goal_id = goals.id
+      LEFT JOIN projects ON posts.connected_project_id = projects.id
+      WHERE posts.user_email = ?
+      ORDER BY scheduled_date ASC
+    `).all(userEmail);
+    res.json(posts);
+  });
+
+  app.post("/api/posts", requireAuth, (req, res) => {
+    const userEmail = (req as any).session.userEmail;
+    const { title, content, platform, status, scheduled_date, hashtags, notes, connected_goal_id, connected_project_id } = req.body;
+    const info = db.prepare(`
+      INSERT INTO posts (title, content, platform, status, scheduled_date, hashtags, notes, connected_goal_id, connected_project_id, user_email)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(title, content, platform, status || 'Draft', scheduled_date, hashtags, notes, connected_goal_id || null, connected_project_id || null, userEmail);
+    res.json({ id: info.lastInsertRowid });
+  });
+
+  app.put("/api/posts/:id", requireAuth, (req, res) => {
+    const userEmail = (req as any).session.userEmail;
+    const { title, content, platform, status, scheduled_date, hashtags, notes, connected_goal_id, connected_project_id } = req.body;
+    db.prepare(`
+      UPDATE posts
+      SET title = ?, content = ?, platform = ?, status = ?, scheduled_date = ?, hashtags = ?, notes = ?, connected_goal_id = ?, connected_project_id = ?
+      WHERE id = ? AND user_email = ?
+    `).run(title, content, platform, status, scheduled_date, hashtags, notes, connected_goal_id || null, connected_project_id || null, req.params.id, userEmail);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/posts/:id", requireAuth, (req, res) => {
+    const userEmail = (req as any).session.userEmail;
+    db.prepare("DELETE FROM posts WHERE id = ? AND user_email = ?").run(req.params.id, userEmail);
+    res.json({ success: true });
   });
 
   // ========== AI Routes ==========

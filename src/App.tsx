@@ -31,13 +31,15 @@ import {
   XCircle,
   X,
   Repeat,
-  Target
+  Target,
+  Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Task, Project, Goal, View, GoogleEvent, GoogleEmail, User, EmailAnalysis, TriagedEmail, ProjectInsight, TaskSuggestion } from './types';
+import { Task, Project, Goal, Post, View, GoogleEvent, GoogleEmail, User, EmailAnalysis, TriagedEmail, ProjectInsight, TaskSuggestion } from './types';
 import TaskForm from './components/TaskForm';
 import ProjectForm from './components/ProjectForm';
 import GoalForm from './components/GoalForm';
+import PostForm from './components/PostForm';
 
 export default function App() {
   // Auth State
@@ -55,6 +57,9 @@ export default function App() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [showGoalForm, setShowGoalForm] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | undefined>();
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [showPostForm, setShowPostForm] = useState(false);
+  const [editingPost, setEditingPost] = useState<Post | undefined>();
 
   // Google Integration State
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
@@ -139,6 +144,24 @@ export default function App() {
     await fetch(`/api/goals/${id}`, { method: 'DELETE' });
     fetchGoals();
     fetchData();
+  };
+
+  const fetchPosts = async () => {
+    try {
+      const res = await fetch('/api/posts');
+      if (res.ok) {
+        const data = await res.json();
+        setPosts(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch posts:', e);
+    }
+  };
+
+  const deletePost = async (id: number) => {
+    if (!confirm('Delete this post?')) return;
+    await fetch(`/api/posts/${id}`, { method: 'DELETE' });
+    fetchPosts();
   };
 
   const fetchReflection = async () => {
@@ -241,6 +264,7 @@ export default function App() {
       if (isAuthed) {
         fetchData();
         fetchGoals();
+        fetchPosts();
         fetchReflection();
         fetchGoogleStatus();
       }
@@ -548,6 +572,7 @@ export default function App() {
           <NavItem id="tasks" icon={ListTodo} label="Tasks" />
           <NavItem id="projects" icon={FolderKanban} label="Projects" />
           <NavItem id="goals" icon={Target} label="Goals" />
+          <NavItem id="posts" icon={Send} label="Posts" />
           <NavItem id="calendar" icon={CalendarIcon} label="Calendar" />
           <NavItem id="integrations" icon={Settings} label="Integrations" />
         </nav>
@@ -583,9 +608,10 @@ export default function App() {
               {view === 'dashboard' ? `Welcome, ${user.name.split(' ')[0]}` : view}
             </h2>
             <p className="text-slate-500">
-              {view === 'tasks' ? `${tasks.filter(t => t.status !== 'Done').length} tasks remaining` : 
+              {view === 'tasks' ? `${tasks.filter(t => t.status !== 'Done').length} tasks remaining` :
                view === 'projects' ? `${projects.length} active projects` :
                view === 'goals' ? `${goals.filter(g => g.status !== 'Completed').length} active goals` :
+               view === 'posts' ? `${posts.filter(p => p.status !== 'Published' && p.status !== 'Cancelled').length} upcoming posts` :
                view === 'integrations' ? 'Connect your external tools' :
                "Here's what's happening today"}
             </p>
@@ -604,9 +630,9 @@ export default function App() {
                 onChange={e => setSearchQuery(e.target.value)}
               />
             </div>
-            {(view === 'tasks' || view === 'projects' || view === 'goals' || view === 'calendar') && (
-              <button 
-                onClick={() => view === 'projects' ? setShowProjectForm(true) : view === 'goals' ? setShowGoalForm(true) : setShowTaskForm(true)}
+            {(view === 'tasks' || view === 'projects' || view === 'goals' || view === 'posts' || view === 'calendar') && (
+              <button
+                onClick={() => view === 'projects' ? setShowProjectForm(true) : view === 'goals' ? setShowGoalForm(true) : view === 'posts' ? setShowPostForm(true) : setShowTaskForm(true)}
                 className="btn-primary flex items-center gap-2"
               >
                 <Plus size={20} />
@@ -1253,8 +1279,122 @@ export default function App() {
               </motion.div>
             )}
 
+            {view === 'posts' && (
+              <motion.div
+                key="posts"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6 max-w-6xl mx-auto"
+              >
+                {posts.length === 0 ? (
+                  <div className="text-center py-20">
+                    <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+                      <Send size={40} />
+                    </div>
+                    <h3 className="text-lg font-medium text-slate-600">No posts yet</h3>
+                    <p className="text-slate-400">Plan and schedule your marketing content.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Status filter tabs */}
+                    {['All', 'Draft', 'Scheduled', 'Published', 'Cancelled'].map(statusFilter => {
+                      const count = statusFilter === 'All' ? posts.length : posts.filter(p => p.status === statusFilter).length;
+                      return count > 0 || statusFilter === 'All' ? null : null;
+                    })}
+
+                    {/* Group by status */}
+                    {(['Draft', 'Scheduled', 'Published', 'Cancelled'] as const).map(statusGroup => {
+                      const groupPosts = posts.filter(p => p.status === statusGroup && p.title.toLowerCase().includes(searchQuery.toLowerCase()));
+                      if (groupPosts.length === 0) return null;
+                      return (
+                        <div key={statusGroup}>
+                          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${
+                              statusGroup === 'Draft' ? 'bg-slate-400' :
+                              statusGroup === 'Scheduled' ? 'bg-blue-500' :
+                              statusGroup === 'Published' ? 'bg-emerald-500' :
+                              'bg-rose-400'
+                            }`} />
+                            {statusGroup} ({groupPosts.length})
+                          </h3>
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {groupPosts.map(post => (
+                              <div
+                                key={post.id}
+                                className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-lg transition-all"
+                              >
+                                <div className="flex justify-between items-start mb-3">
+                                  <div className="flex items-center gap-2">
+                                    {post.platform && (
+                                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-violet-100 text-violet-700">
+                                        {post.platform}
+                                      </span>
+                                    )}
+                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                      post.status === 'Draft' ? 'bg-slate-100 text-slate-600' :
+                                      post.status === 'Scheduled' ? 'bg-blue-100 text-blue-700' :
+                                      post.status === 'Published' ? 'bg-emerald-100 text-emerald-700' :
+                                      'bg-rose-100 text-rose-600'
+                                    }`}>
+                                      {post.status}
+                                    </span>
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => { setEditingPost(post); setShowPostForm(true); }}
+                                      className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600"
+                                    >
+                                      <Edit2 size={16} />
+                                    </button>
+                                    <button
+                                      onClick={() => deletePost(post.id!)}
+                                      className="p-2 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-500"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <h4 className="text-lg font-bold text-slate-800 mb-2">{post.title}</h4>
+                                {post.content && (
+                                  <p className="text-slate-500 text-sm mb-3 line-clamp-2">{post.content}</p>
+                                )}
+
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                                  {post.scheduled_date && (
+                                    <span className="flex items-center gap-1 font-medium">
+                                      <CalendarIcon size={12} /> {post.scheduled_date}
+                                    </span>
+                                  )}
+                                  {post.goal_name && (
+                                    <span className="flex items-center gap-1 text-teal-500 font-medium">
+                                      <Target size={12} /> {post.goal_name}
+                                    </span>
+                                  )}
+                                  {post.project_name && (
+                                    <span className="flex items-center gap-1 text-indigo-500 font-medium">
+                                      <FolderKanban size={12} /> {post.project_name}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {post.hashtags && (
+                                  <p className="text-xs text-violet-500 mt-2 font-medium">{post.hashtags}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </motion.div>
+            )}
+
             {view === 'dashboard' && (
-              <motion.div 
+              <motion.div
                 key="dashboard"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1559,6 +1699,9 @@ export default function App() {
         <button onClick={() => setView('goals')} className={`p-2 rounded-xl ${view === 'goals' ? 'text-primary bg-emerald-50' : 'text-slate-400'}`}>
           <Target size={24} />
         </button>
+        <button onClick={() => setView('posts')} className={`p-2 rounded-xl ${view === 'posts' ? 'text-primary bg-emerald-50' : 'text-slate-400'}`}>
+          <Send size={24} />
+        </button>
         <button onClick={() => setView('calendar')} className={`p-2 rounded-xl ${view === 'calendar' ? 'text-primary bg-emerald-50' : 'text-slate-400'}`}>
           <CalendarIcon size={24} />
         </button>
@@ -1653,10 +1796,19 @@ export default function App() {
           />
         )}
         {showGoalForm && (
-          <GoalForm 
+          <GoalForm
             initialGoal={editingGoal}
             onClose={() => { setShowGoalForm(false); setEditingGoal(undefined); }}
             onSave={() => { setShowGoalForm(false); setEditingGoal(undefined); fetchGoals(); }}
+          />
+        )}
+        {showPostForm && (
+          <PostForm
+            initialPost={editingPost}
+            goals={goals}
+            projects={projects}
+            onClose={() => { setShowPostForm(false); setEditingPost(undefined); }}
+            onSave={() => { setShowPostForm(false); setEditingPost(undefined); fetchPosts(); }}
           />
         )}
       </AnimatePresence>

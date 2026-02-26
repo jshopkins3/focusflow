@@ -45,7 +45,22 @@ export interface User {
   connected: boolean;
 }
 
-export type View = 'tasks' | 'projects' | 'goals' | 'dashboard' | 'calendar' | 'integrations';
+export interface Post {
+  id?: number;
+  title: string;
+  content: string;
+  platform: string;
+  status: 'Draft' | 'Scheduled' | 'Published' | 'Cancelled';
+  scheduled_date: string;
+  hashtags: string;
+  notes: string;
+  connected_goal_id: number | null;
+  connected_project_id: number | null;
+  goal_name?: string;
+  project_name?: string;
+}
+
+export type View = 'tasks' | 'projects' | 'goals' | 'posts' | 'dashboard' | 'calendar' | 'integrations';
 
 export interface GoogleEvent {
   id: string;
