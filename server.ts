@@ -327,8 +327,19 @@ async function startServer() {
     });
   });
 
-  // Auth middleware - checks for authenticated user
+  // Auth middleware - checks for authenticated user (session OR API key)
   const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    // Check for API key auth (used by MCP server)
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ') && process.env.FOCUSFLOW_API_KEY) {
+      const token = authHeader.slice(7);
+      if (token === process.env.FOCUSFLOW_API_KEY && process.env.FOCUSFLOW_USER_EMAIL) {
+        (req as any).session = (req as any).session || {};
+        (req as any).session.userEmail = process.env.FOCUSFLOW_USER_EMAIL;
+        return next();
+      }
+    }
+    // Fall back to session auth
     if (!(req as any).session?.userEmail) {
       return res.status(401).json({ error: 'Authentication required' });
     }
