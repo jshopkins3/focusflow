@@ -140,6 +140,7 @@ export default function ProjectForm({ onClose, onSave, initialProject }: Project
                 onChange={e => setProject({...project, status: e.target.value})}
               >
                 <option value="Active">Active</option>
+                <option value="In Progress">In Progress</option>
                 <option value="On Hold">On Hold</option>
                 <option value="Completed">Completed</option>
                 <option value="Cancelled">Cancelled</option>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Calendar, Flag, Tag, Link2, ArrowRight } from 'lucide-react';
+import { Plus, X, Calendar, Flag, Tag, Link2, ArrowRight, Repeat } from 'lucide-react';
 import { Task, Project } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -19,7 +19,8 @@ export default function TaskForm({ onClose, onSave, projects, initialTask }: Tas
     status: 'To Do',
     connected_project_id: null,
     next_step: '',
-    due_date: new Date().toISOString().split('T')[0]
+    due_date: new Date().toISOString().split('T')[0],
+    recurrence: 'none'
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,6 +98,22 @@ export default function TaskForm({ onClose, onSave, projects, initialTask }: Tas
                 value={task.due_date}
                 onChange={e => setTask({...task, due_date: e.target.value})}
               />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-500 flex items-center gap-2">
+                <Repeat size={14} /> Recurrence
+              </label>
+              <select 
+                className="input-field"
+                value={task.recurrence || 'none'}
+                onChange={e => setTask({...task, recurrence: e.target.value as any})}
+              >
+                <option value="none">No Recurrence</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
             </div>
 
             <div className="space-y-2">

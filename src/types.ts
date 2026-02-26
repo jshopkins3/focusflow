@@ -22,6 +22,8 @@ export interface Task {
   next_step: string;
   due_date: string;
   source_email_id?: string | null;
+  recurrence: 'none' | 'daily' | 'weekly' | 'monthly' | null;
+  recurrence_source_id?: number | null;
 }
 
 export interface User {

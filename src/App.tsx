@@ -29,7 +29,8 @@ import {
   Zap,
   Brain,
   XCircle,
-  X
+  X,
+  Repeat
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Task, Project, View, GoogleEvent, GoogleEmail, User, EmailAnalysis, TriagedEmail, ProjectInsight, TaskSuggestion } from './types';
@@ -475,7 +476,7 @@ export default function App() {
           <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-200 mx-auto mb-6">
             <CheckCircle2 size={32} />
           </div>
-          <div className="animate-pulse text-slate-400 font-medium">Loading FocusFlow...</div>
+          <div className="animate-pulse text-slate-400 font-medium">Loading Anchor Focus Flow...</div>
         </div>
       </div>
     );
@@ -489,7 +490,7 @@ export default function App() {
           <div className="w-20 h-20 bg-primary rounded-3xl flex items-center justify-center text-white shadow-lg shadow-emerald-200 mx-auto mb-6">
             <CheckCircle2 size={40} />
           </div>
-          <h1 className="text-3xl font-black text-slate-800 mb-2">FocusFlow</h1>
+          <h1 className="text-3xl font-black text-slate-800 mb-2">Anchor Focus Flow</h1>
           <p className="text-slate-500 mb-8">Task management powered by AI for Anchor Mortgage</p>
           <button
             onClick={handleConnectGoogle}
@@ -514,7 +515,7 @@ export default function App() {
           <div className="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-200">
             <CheckCircle2 size={24} />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">FocusFlow</h1>
+          <h1 className="text-xl font-bold tracking-tight">Anchor Focus Flow</h1>
         </div>
 
         <nav className="flex flex-col gap-2 flex-1">
@@ -668,6 +669,12 @@ export default function App() {
                           {task.project_name && (
                             <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
                               {task.project_name}
+                            </span>
+                          )}
+                          {task.recurrence && task.recurrence !== 'none' && (
+                            <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-violet-50 text-violet-600 border border-violet-200 flex items-center gap-1">
+                              <Repeat size={10} />
+                              {task.recurrence.charAt(0).toUpperCase() + task.recurrence.slice(1)}
                             </span>
                           )}
                         </div>
@@ -1080,7 +1087,9 @@ export default function App() {
                       <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                           project.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
+                          project.status === 'In Progress' ? 'bg-purple-100 text-purple-700' :
                           project.status === 'On Hold' ? 'bg-amber-100 text-amber-700' :
+                          project.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
                           'bg-blue-100 text-blue-700'
                         }`}>
                           {project.status}
@@ -1263,7 +1272,10 @@ export default function App() {
                               task.priority === 'Medium' ? 'bg-amber-400' : 'bg-emerald-400'
                             }`} />
                             <div className="flex-1">
-                              <h4 className="font-bold text-slate-700 truncate">{task.title}</h4>
+                              <h4 className="font-bold text-slate-700 truncate flex items-center gap-1.5">
+                                {task.title}
+                                {task.recurrence && task.recurrence !== 'none' && <Repeat size={12} className="text-violet-400 flex-shrink-0" />}
+                              </h4>
                               <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{task.due_date}</p>
                             </div>
                             <ChevronRight size={18} className="text-slate-300" />

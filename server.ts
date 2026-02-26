@@ -37,9 +37,19 @@ db.exec(`
     connected_project_id INTEGER,
     next_step TEXT,
     due_date TEXT,
+    recurrence TEXT DEFAULT 'none',
+    recurrence_source_id INTEGER,
     FOREIGN KEY (connected_project_id) REFERENCES projects(id)
   );
 `);
+
+// Migration: add recurrence columns to existing tasks table
+try {
+  db.exec(`ALTER TABLE tasks ADD COLUMN recurrence TEXT DEFAULT 'none'`);
+} catch (e) { /* column already exists */ }
+try {
+  db.exec(`ALTER TABLE tasks ADD COLUMN recurrence_source_id INTEGER`);
+} catch (e) { /* column already exists */ }
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS reflections (
@@ -241,7 +251,7 @@ async function startServer() {
             <body>
               <div class="card">
                 <h2>Connection Successful!</h2>
-                <p>You can now close this window and return to FocusFlow.</p>
+                <p>You can now close this window and return to Anchor Focus Flow.</p>
                 <div style="margin-top: 1rem; padding: 0.5rem; background: #f1f5f9; border-radius: 0.5rem; font-family: monospace; font-size: 10px; color: #64748b;">
                   Session: ${req.sessionID}
                 </div>
@@ -474,23 +484,49 @@ async function startServer() {
 
   app.post("/api/tasks", requireAuth, (req, res) => {
     const userEmail = (req as any).session.userEmail;
-    const { title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, source_email_id } = req.body;
+    const { title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, source_email_id, recurrence } = req.body;
     const info = db.prepare(`
-      INSERT INTO tasks (title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, user_email, source_email_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(title, project_type, priority, task_type, status || 'To Do', connected_project_id, next_step, due_date, userEmail, source_email_id || null);
+      INSERT INTO tasks (title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, user_email, source_email_id, recurrence)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(title, project_type, priority, task_type, status || 'To Do', connected_project_id, next_step, due_date, userEmail, source_email_id || null, recurrence || 'none');
     res.json({ id: info.lastInsertRowid });
   });
 
+  // Helper: compute next due date for recurring tasks
+  function getNextDueDate(currentDue: string, recurrence: string): string {
+    const d = new Date(currentDue + 'T00:00:00');
+    if (recurrence === 'daily') d.setDate(d.getDate() + 1);
+    else if (recurrence === 'weekly') d.setDate(d.getDate() + 7);
+    else if (recurrence === 'monthly') d.setMonth(d.getMonth() + 1);
+    return d.toISOString().split('T')[0];
+  }
+
   app.put("/api/tasks/:id", requireAuth, (req, res) => {
     const userEmail = (req as any).session.userEmail;
-    const { title, project_type, priority, task_type, status, connected_project_id, next_step, due_date } = req.body;
+    const { title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, recurrence } = req.body;
+
+    // Get the current task before updating (to detect completion of recurring task)
+    const existingTask = db.prepare("SELECT * FROM tasks WHERE id = ? AND user_email = ?").get(req.params.id, userEmail) as any;
+
     db.prepare(`
       UPDATE tasks
-      SET title = ?, project_type = ?, priority = ?, task_type = ?, status = ?, connected_project_id = ?, next_step = ?, due_date = ?
+      SET title = ?, project_type = ?, priority = ?, task_type = ?, status = ?, connected_project_id = ?, next_step = ?, due_date = ?, recurrence = ?
       WHERE id = ? AND user_email = ?
-    `).run(title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, req.params.id, userEmail);
-    res.json({ success: true });
+    `).run(title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, recurrence || 'none', req.params.id, userEmail);
+
+    // Auto-generate next occurrence when a recurring task is completed
+    let nextTaskId = null;
+    if (existingTask && status === 'Done' && existingTask.recurrence && existingTask.recurrence !== 'none') {
+      const nextDue = getNextDueDate(existingTask.due_date || new Date().toISOString().split('T')[0], existingTask.recurrence);
+      const sourceId = existingTask.recurrence_source_id || existingTask.id;
+      const nextInfo = db.prepare(`
+        INSERT INTO tasks (title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, user_email, recurrence, recurrence_source_id)
+        VALUES (?, ?, ?, ?, 'To Do', ?, ?, ?, ?, ?, ?)
+      `).run(existingTask.title, existingTask.project_type, existingTask.priority, existingTask.task_type, existingTask.connected_project_id, existingTask.next_step, nextDue, userEmail, existingTask.recurrence, sourceId);
+      nextTaskId = nextInfo.lastInsertRowid;
+    }
+
+    res.json({ success: true, nextTaskId });
   });
 
   app.delete("/api/tasks/:id", requireAuth, (req, res) => {
