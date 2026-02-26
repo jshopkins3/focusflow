@@ -41,6 +41,18 @@ db.exec(`
   );
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS reflections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    mood INTEGER NOT NULL,
+    gratitude TEXT,
+    user_email TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(date, user_email)
+  );
+`);
+
 // Safe migrations - add columns if they don't exist
 const migrations = [
   'ALTER TABLE tasks ADD COLUMN user_email TEXT',
@@ -474,6 +486,35 @@ async function startServer() {
     const userEmail = (req as any).session.userEmail;
     db.prepare("DELETE FROM tasks WHERE id = ? AND user_email = ?").run(req.params.id, userEmail);
     res.json({ success: true });
+  });
+
+  // ========== Reflection Routes ==========
+
+  app.get("/api/reflections/today", requireAuth, (req, res) => {
+    const userEmail = (req as any).session.userEmail;
+    const today = new Date().toISOString().split('T')[0];
+    const reflection = db.prepare("SELECT * FROM reflections WHERE date = ? AND user_email = ?").get(today, userEmail);
+    res.json(reflection || null);
+  });
+
+  app.get("/api/reflections", requireAuth, (req, res) => {
+    const userEmail = (req as any).session.userEmail;
+    const reflections = db.prepare(
+      "SELECT * FROM reflections WHERE user_email = ? ORDER BY date DESC LIMIT 30"
+    ).all(userEmail);
+    res.json(reflections);
+  });
+
+  app.post("/api/reflections", requireAuth, (req, res) => {
+    const userEmail = (req as any).session.userEmail;
+    const today = new Date().toISOString().split('T')[0];
+    const { mood, gratitude } = req.body;
+    db.prepare(
+      `INSERT INTO reflections (date, mood, gratitude, user_email) VALUES (?, ?, ?, ?)
+       ON CONFLICT(date, user_email) DO UPDATE SET mood = excluded.mood, gratitude = excluded.gratitude`
+    ).run(today, mood, gratitude || '', userEmail);
+    const reflection = db.prepare("SELECT * FROM reflections WHERE date = ? AND user_email = ?").get(today, userEmail);
+    res.json(reflection);
   });
 
   // ========== AI Routes ==========

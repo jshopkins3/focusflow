@@ -28,7 +28,8 @@ import {
   Wand2,
   Zap,
   Brain,
-  XCircle
+  XCircle,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Task, Project, View, GoogleEvent, GoogleEmail, User, EmailAnalysis, TriagedEmail, ProjectInsight, TaskSuggestion } from './types';
@@ -68,6 +69,14 @@ export default function App() {
   const [taskSuggestions, setTaskSuggestions] = useState<TaskSuggestion[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
 
+  // Reflection State
+  const [todayReflection, setTodayReflection] = useState<{ id: number; date: string; mood: number; gratitude: string } | null>(null);
+  const [reflectionMood, setReflectionMood] = useState<number>(0);
+  const [reflectionGratitude, setReflectionGratitude] = useState('');
+  const [isEditingReflection, setIsEditingReflection] = useState(false);
+  const [reflectionStreak, setReflectionStreak] = useState(0);
+  const [isSavingReflection, setIsSavingReflection] = useState(false);
+
   const checkAuth = async () => {
     try {
       const res = await fetch('/api/auth/me');
@@ -104,6 +113,58 @@ export default function App() {
       setProjects(projectsData);
     } catch (e) {
       console.error('Failed to fetch data:', e);
+    }
+  };
+
+  const fetchReflection = async () => {
+    try {
+      const [todayRes, historyRes] = await Promise.all([
+        fetch('/api/reflections/today'),
+        fetch('/api/reflections')
+      ]);
+      const todayData = await todayRes.json();
+      const historyData = await historyRes.json();
+      if (todayData) {
+        setTodayReflection(todayData);
+        setReflectionMood(todayData.mood);
+        setReflectionGratitude(todayData.gratitude || '');
+      }
+      // Calculate streak
+      let streak = 0;
+      const today = new Date();
+      for (let i = 0; i < historyData.length; i++) {
+        const expected = new Date(today);
+        expected.setDate(expected.getDate() - i);
+        const expectedStr = expected.toISOString().split('T')[0];
+        if (historyData[i]?.date === expectedStr) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+      setReflectionStreak(streak);
+    } catch (e) {
+      console.error('Failed to fetch reflection:', e);
+    }
+  };
+
+  const saveReflection = async () => {
+    if (!reflectionMood) return;
+    setIsSavingReflection(true);
+    try {
+      const res = await fetch('/api/reflections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mood: reflectionMood, gratitude: reflectionGratitude })
+      });
+      const data = await res.json();
+      setTodayReflection(data);
+      setIsEditingReflection(false);
+      fetchReflection(); // refresh streak
+    } catch (e) {
+      console.error('Failed to save reflection:', e);
+    } finally {
+      setIsSavingReflection(false);
     }
   };
 
@@ -154,6 +215,7 @@ export default function App() {
       const isAuthed = await checkAuth();
       if (isAuthed) {
         fetchData();
+        fetchReflection();
         fetchGoogleStatus();
       }
     };
@@ -1042,6 +1104,112 @@ export default function App() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-8 max-w-6xl mx-auto"
               >
+                {/* Daily Reflection */}
+                <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 p-6 rounded-[2rem] border border-amber-200/50 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">☀️</span>
+                      <h3 className="font-bold text-slate-800 text-lg">Daily Reflection</h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {reflectionStreak > 0 && (
+                        <span className="text-sm font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">
+                          🔥 {reflectionStreak} day{reflectionStreak !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {todayReflection && !isEditingReflection && (
+                        <button
+                          onClick={() => setIsEditingReflection(true)}
+                          className="text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {(!todayReflection || isEditingReflection) ? (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-600 mb-3">How are you feeling this morning?</p>
+                        <div className="flex gap-3">
+                          {[
+                            { value: 1, emoji: '😫', label: 'Rough' },
+                            { value: 2, emoji: '😕', label: 'Meh' },
+                            { value: 3, emoji: '😐', label: 'Okay' },
+                            { value: 4, emoji: '🙂', label: 'Good' },
+                            { value: 5, emoji: '😄', label: 'Great' },
+                          ].map(({ value, emoji, label }) => (
+                            <motion.button
+                              key={value}
+                              whileHover={{ scale: 1.15 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => setReflectionMood(value)}
+                              className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+                                reflectionMood === value
+                                  ? 'bg-white shadow-md ring-2 ring-emerald-400 scale-110'
+                                  : 'hover:bg-white/60'
+                              }`}
+                            >
+                              <span className="text-2xl">{emoji}</span>
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+                            </motion.button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-600 mb-2">What are you most grateful for from yesterday?</p>
+                        <textarea
+                          value={reflectionGratitude}
+                          onChange={(e) => setReflectionGratitude(e.target.value)}
+                          placeholder="I'm grateful for..."
+                          className="w-full bg-white/70 border border-amber-200 rounded-xl p-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent resize-none"
+                          rows={2}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={saveReflection}
+                          disabled={!reflectionMood || isSavingReflection}
+                          className="px-5 py-2 bg-emerald-500 text-white font-bold text-sm rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isSavingReflection ? 'Saving...' : todayReflection ? 'Update' : 'Save Reflection'}
+                        </button>
+                        {isEditingReflection && (
+                          <button
+                            onClick={() => {
+                              setIsEditingReflection(false);
+                              if (todayReflection) {
+                                setReflectionMood(todayReflection.mood);
+                                setReflectionGratitude(todayReflection.gratitude || '');
+                              }
+                            }}
+                            className="px-4 py-2 text-slate-500 font-bold text-sm rounded-xl hover:bg-white/60 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-4">
+                      <span className="text-4xl">
+                        {['', '😫', '😕', '😐', '🙂', '😄'][todayReflection.mood]}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          {['', 'Rough', 'Meh', 'Okay', 'Good', 'Great'][todayReflection.mood]} morning
+                        </p>
+                        {todayReflection.gratitude && (
+                          <p className="text-slate-700 text-sm leading-relaxed">
+                            "{todayReflection.gratitude}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-4">
