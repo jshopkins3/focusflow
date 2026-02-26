@@ -379,6 +379,26 @@ async function startServer() {
     next();
   };
 
+  // Debug auth endpoint (temporary)
+  app.get("/api/debug-auth", (req, res) => {
+    const apiKey = cleanEnv(process.env.FOCUSFLOW_API_KEY);
+    const userEmail = cleanEnv(process.env.FOCUSFLOW_USER_EMAIL);
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+    res.json({
+      hasApiKeyEnv: !!apiKey,
+      apiKeyLength: apiKey?.length || 0,
+      apiKeyFirst4: apiKey?.slice(0, 4) || null,
+      hasUserEmail: !!userEmail,
+      hasAuthHeader: !!authHeader,
+      authHeaderValue: authHeader?.slice(0, 15) || null,
+      tokenLength: token?.length || 0,
+      tokenFirst4: token?.slice(0, 4) || null,
+      match: token === apiKey,
+      deployVersion: "v2-debug"
+    });
+  });
+
   // Current user info
   app.get("/api/auth/me", (req, res) => {
     if (!(req as any).session?.userEmail) {
