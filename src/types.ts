@@ -1,3 +1,12 @@
+export interface Goal {
+  id?: number;
+  name: string;
+  description: string;
+  timeframe: string;
+  target_date: string;
+  status: string;
+}
+
 export interface Project {
   id?: number;
   name: string;
@@ -8,6 +17,8 @@ export interface Project {
   purpose: string;
   due_date: string;
   status: string;
+  connected_goal_id: number | null;
+  goal_name?: string;
 }
 
 export interface Task {
@@ -24,6 +35,8 @@ export interface Task {
   source_email_id?: string | null;
   recurrence: 'none' | 'daily' | 'weekly' | 'monthly' | null;
   recurrence_source_id?: number | null;
+  connected_goal_id: number | null;
+  goal_name?: string;
 }
 
 export interface User {
@@ -32,7 +45,7 @@ export interface User {
   connected: boolean;
 }
 
-export type View = 'tasks' | 'projects' | 'dashboard' | 'calendar' | 'integrations';
+export type View = 'tasks' | 'projects' | 'goals' | 'dashboard' | 'calendar' | 'integrations';
 
 export interface GoogleEvent {
   id: string;

@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
 import { X, Target, User, Layers, Users, Info, Calendar, Activity } from 'lucide-react';
-import { Project } from '../types';
+import { Project, Goal } from '../types';
 import { motion } from 'motion/react';
 
 interface ProjectFormProps {
   onClose: () => void;
   onSave: () => void;
   initialProject?: Project;
+  goals: Goal[];
 }
 
-export default function ProjectForm({ onClose, onSave, initialProject }: ProjectFormProps) {
+export default function ProjectForm({ onClose, onSave, initialProject, goals }: ProjectFormProps) {
   const [project, setProject] = useState<Partial<Project>>(initialProject || {
     name: '',
     related_goal: '',
+    connected_goal_id: null,
     owner: '',
     scope: '',
     team: '',
@@ -72,14 +74,22 @@ export default function ProjectForm({ onClose, onSave, initialProject }: Project
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-500 flex items-center gap-2">
-                <Target size={14} /> Related Goal
+                <Target size={14} /> Connected Goal
               </label>
-              <input 
+              <select
                 className="input-field"
-                placeholder="e.g. Launch Product, Health"
-                value={project.related_goal}
-                onChange={e => setProject({...project, related_goal: e.target.value})}
-              />
+                value={project.connected_goal_id || ''}
+                onChange={e => {
+                  const goalId = e.target.value ? Number(e.target.value) : null;
+                  const goal = goals.find(g => g.id === goalId);
+                  setProject({...project, connected_goal_id: goalId, related_goal: goal?.name || ''});
+                }}
+              >
+                <option value="">No goal connected</option>
+                {goals.map(g => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-2">

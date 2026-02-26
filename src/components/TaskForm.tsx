@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Calendar, Flag, Tag, Link2, ArrowRight, Repeat } from 'lucide-react';
-import { Task, Project } from '../types';
+import { Plus, X, Calendar, Flag, Tag, Link2, ArrowRight, Repeat, Target } from 'lucide-react';
+import { Task, Project, Goal } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface TaskFormProps {
   onClose: () => void;
   onSave: () => void;
   projects: Project[];
+  goals: Goal[];
   initialTask?: Task;
 }
 
-export default function TaskForm({ onClose, onSave, projects, initialTask }: TaskFormProps) {
+export default function TaskForm({ onClose, onSave, projects, goals, initialTask }: TaskFormProps) {
   const [task, setTask] = useState<Partial<Task>>(initialTask || {
     title: '',
     project_type: '',
@@ -20,7 +21,8 @@ export default function TaskForm({ onClose, onSave, projects, initialTask }: Tas
     connected_project_id: null,
     next_step: '',
     due_date: new Date().toISOString().split('T')[0],
-    recurrence: 'none'
+    recurrence: 'none',
+    connected_goal_id: null
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -152,6 +154,22 @@ export default function TaskForm({ onClose, onSave, projects, initialTask }: Tas
                 <option value="">No Project</option>
                 {projects.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-medium text-slate-500 flex items-center gap-2">
+                <Target size={14} /> Connected Goal
+              </label>
+              <select 
+                className="input-field"
+                value={task.connected_goal_id || ''}
+                onChange={e => setTask({...task, connected_goal_id: e.target.value ? Number(e.target.value) : null})}
+              >
+                <option value="">No Goal</option>
+                {goals.map(g => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
                 ))}
               </select>
             </div>

@@ -43,6 +43,26 @@ db.exec(`
   );
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    timeframe TEXT,
+    target_date TEXT,
+    status TEXT DEFAULT 'Active',
+    user_email TEXT NOT NULL
+  );
+`);
+
+// Migration: add goal linkage columns to existing tables
+try {
+  db.exec(`ALTER TABLE projects ADD COLUMN connected_goal_id INTEGER`);
+} catch (e) { /* column already exists */ }
+try {
+  db.exec(`ALTER TABLE tasks ADD COLUMN connected_goal_id INTEGER`);
+} catch (e) { /* column already exists */ }
+
 // Migration: add recurrence columns to existing tasks table
 try {
   db.exec(`ALTER TABLE tasks ADD COLUMN recurrence TEXT DEFAULT 'none'`);
@@ -428,31 +448,73 @@ async function startServer() {
     }
   });
 
-  // API Routes
+  // ========== Goal Routes ==========
+  app.get("/api/goals", requireAuth, (req, res) => {
+    const userEmail = (req as any).session.userEmail;
+    const goals = db.prepare("SELECT * FROM goals WHERE user_email = ? ORDER BY target_date ASC").all(userEmail);
+    res.json(goals);
+  });
+
+  app.post("/api/goals", requireAuth, (req, res) => {
+    const userEmail = (req as any).session.userEmail;
+    const { name, description, timeframe, target_date, status } = req.body;
+    const info = db.prepare(`
+      INSERT INTO goals (name, description, timeframe, target_date, status, user_email)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(name, description, timeframe, target_date, status || 'Active', userEmail);
+    res.json({ id: info.lastInsertRowid });
+  });
+
+  app.put("/api/goals/:id", requireAuth, (req, res) => {
+    const userEmail = (req as any).session.userEmail;
+    const { name, description, timeframe, target_date, status } = req.body;
+    db.prepare(`
+      UPDATE goals SET name = ?, description = ?, timeframe = ?, target_date = ?, status = ?
+      WHERE id = ? AND user_email = ?
+    `).run(name, description, timeframe, target_date, status, req.params.id, userEmail);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/goals/:id", requireAuth, (req, res) => {
+    const userEmail = (req as any).session.userEmail;
+    // Unlink projects and tasks from this goal
+    db.prepare("UPDATE projects SET connected_goal_id = NULL WHERE connected_goal_id = ? AND user_email = ?").run(req.params.id, userEmail);
+    db.prepare("UPDATE tasks SET connected_goal_id = NULL WHERE connected_goal_id = ? AND user_email = ?").run(req.params.id, userEmail);
+    db.prepare("DELETE FROM goals WHERE id = ? AND user_email = ?").run(req.params.id, userEmail);
+    res.json({ success: true });
+  });
+
+  // ========== Project Routes ==========
   app.get("/api/projects", requireAuth, (req, res) => {
     const userEmail = (req as any).session.userEmail;
-    const projects = db.prepare("SELECT * FROM projects WHERE user_email = ? ORDER BY due_date ASC").all(userEmail);
+    const projects = db.prepare(`
+      SELECT projects.*, goals.name as goal_name
+      FROM projects
+      LEFT JOIN goals ON projects.connected_goal_id = goals.id
+      WHERE projects.user_email = ?
+      ORDER BY due_date ASC
+    `).all(userEmail);
     res.json(projects);
   });
 
   app.post("/api/projects", requireAuth, (req, res) => {
     const userEmail = (req as any).session.userEmail;
-    const { name, related_goal, owner, scope, team, purpose, due_date, status } = req.body;
+    const { name, related_goal, owner, scope, team, purpose, due_date, status, connected_goal_id } = req.body;
     const info = db.prepare(`
-      INSERT INTO projects (name, related_goal, owner, scope, team, purpose, due_date, status, user_email)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(name, related_goal, owner, scope, team, purpose, due_date, status || 'Active', userEmail);
+      INSERT INTO projects (name, related_goal, owner, scope, team, purpose, due_date, status, user_email, connected_goal_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(name, related_goal, owner, scope, team, purpose, due_date, status || 'Active', userEmail, connected_goal_id || null);
     res.json({ id: info.lastInsertRowid });
   });
 
   app.put("/api/projects/:id", requireAuth, (req, res) => {
     const userEmail = (req as any).session.userEmail;
-    const { name, related_goal, owner, scope, team, purpose, due_date, status } = req.body;
+    const { name, related_goal, owner, scope, team, purpose, due_date, status, connected_goal_id } = req.body;
     db.prepare(`
       UPDATE projects
-      SET name = ?, related_goal = ?, owner = ?, scope = ?, team = ?, purpose = ?, due_date = ?, status = ?
+      SET name = ?, related_goal = ?, owner = ?, scope = ?, team = ?, purpose = ?, due_date = ?, status = ?, connected_goal_id = ?
       WHERE id = ? AND user_email = ?
-    `).run(name, related_goal, owner, scope, team, purpose, due_date, status, req.params.id, userEmail);
+    `).run(name, related_goal, owner, scope, team, purpose, due_date, status, connected_goal_id || null, req.params.id, userEmail);
     res.json({ success: true });
   });
 
@@ -466,9 +528,10 @@ async function startServer() {
   app.get("/api/tasks", requireAuth, (req, res) => {
     const userEmail = (req as any).session.userEmail;
     const tasks = db.prepare(`
-      SELECT tasks.*, projects.name as project_name
+      SELECT tasks.*, projects.name as project_name, goals.name as goal_name
       FROM tasks
       LEFT JOIN projects ON tasks.connected_project_id = projects.id
+      LEFT JOIN goals ON tasks.connected_goal_id = goals.id
       WHERE tasks.user_email = ?
       ORDER BY
         CASE priority
@@ -484,11 +547,11 @@ async function startServer() {
 
   app.post("/api/tasks", requireAuth, (req, res) => {
     const userEmail = (req as any).session.userEmail;
-    const { title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, source_email_id, recurrence } = req.body;
+    const { title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, source_email_id, recurrence, connected_goal_id } = req.body;
     const info = db.prepare(`
-      INSERT INTO tasks (title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, user_email, source_email_id, recurrence)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(title, project_type, priority, task_type, status || 'To Do', connected_project_id, next_step, due_date, userEmail, source_email_id || null, recurrence || 'none');
+      INSERT INTO tasks (title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, user_email, source_email_id, recurrence, connected_goal_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(title, project_type, priority, task_type, status || 'To Do', connected_project_id, next_step, due_date, userEmail, source_email_id || null, recurrence || 'none', connected_goal_id || null);
     res.json({ id: info.lastInsertRowid });
   });
 
@@ -503,16 +566,16 @@ async function startServer() {
 
   app.put("/api/tasks/:id", requireAuth, (req, res) => {
     const userEmail = (req as any).session.userEmail;
-    const { title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, recurrence } = req.body;
+    const { title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, recurrence, connected_goal_id } = req.body;
 
     // Get the current task before updating (to detect completion of recurring task)
     const existingTask = db.prepare("SELECT * FROM tasks WHERE id = ? AND user_email = ?").get(req.params.id, userEmail) as any;
 
     db.prepare(`
       UPDATE tasks
-      SET title = ?, project_type = ?, priority = ?, task_type = ?, status = ?, connected_project_id = ?, next_step = ?, due_date = ?, recurrence = ?
+      SET title = ?, project_type = ?, priority = ?, task_type = ?, status = ?, connected_project_id = ?, next_step = ?, due_date = ?, recurrence = ?, connected_goal_id = ?
       WHERE id = ? AND user_email = ?
-    `).run(title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, recurrence || 'none', req.params.id, userEmail);
+    `).run(title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, recurrence || 'none', connected_goal_id || null, req.params.id, userEmail);
 
     // Auto-generate next occurrence when a recurring task is completed
     let nextTaskId = null;
@@ -520,9 +583,9 @@ async function startServer() {
       const nextDue = getNextDueDate(existingTask.due_date || new Date().toISOString().split('T')[0], existingTask.recurrence);
       const sourceId = existingTask.recurrence_source_id || existingTask.id;
       const nextInfo = db.prepare(`
-        INSERT INTO tasks (title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, user_email, recurrence, recurrence_source_id)
-        VALUES (?, ?, ?, ?, 'To Do', ?, ?, ?, ?, ?, ?)
-      `).run(existingTask.title, existingTask.project_type, existingTask.priority, existingTask.task_type, existingTask.connected_project_id, existingTask.next_step, nextDue, userEmail, existingTask.recurrence, sourceId);
+        INSERT INTO tasks (title, project_type, priority, task_type, status, connected_project_id, next_step, due_date, user_email, recurrence, recurrence_source_id, connected_goal_id)
+        VALUES (?, ?, ?, ?, 'To Do', ?, ?, ?, ?, ?, ?, ?)
+      `).run(existingTask.title, existingTask.project_type, existingTask.priority, existingTask.task_type, existingTask.connected_project_id, existingTask.next_step, nextDue, userEmail, existingTask.recurrence, sourceId, existingTask.connected_goal_id);
       nextTaskId = nextInfo.lastInsertRowid;
     }
 

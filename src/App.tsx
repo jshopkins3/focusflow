@@ -30,12 +30,14 @@ import {
   Brain,
   XCircle,
   X,
-  Repeat
+  Repeat,
+  Target
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Task, Project, View, GoogleEvent, GoogleEmail, User, EmailAnalysis, TriagedEmail, ProjectInsight, TaskSuggestion } from './types';
+import { Task, Project, Goal, View, GoogleEvent, GoogleEmail, User, EmailAnalysis, TriagedEmail, ProjectInsight, TaskSuggestion } from './types';
 import TaskForm from './components/TaskForm';
 import ProjectForm from './components/ProjectForm';
+import GoalForm from './components/GoalForm';
 
 export default function App() {
   // Auth State
@@ -50,6 +52,9 @@ export default function App() {
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | undefined>();
   const [editingProject, setEditingProject] = useState<Project | undefined>();
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [showGoalForm, setShowGoalForm] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<Goal | undefined>();
 
   // Google Integration State
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
@@ -115,6 +120,25 @@ export default function App() {
     } catch (e) {
       console.error('Failed to fetch data:', e);
     }
+  };
+
+  const fetchGoals = async () => {
+    try {
+      const res = await fetch('/api/goals');
+      if (res.ok) {
+        const data = await res.json();
+        setGoals(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch goals:', e);
+    }
+  };
+
+  const deleteGoal = async (id: number) => {
+    if (!confirm('Deleting a goal will unlink all connected projects and tasks. Continue?')) return;
+    await fetch(`/api/goals/${id}`, { method: 'DELETE' });
+    fetchGoals();
+    fetchData();
   };
 
   const fetchReflection = async () => {
@@ -216,6 +240,7 @@ export default function App() {
       const isAuthed = await checkAuth();
       if (isAuthed) {
         fetchData();
+        fetchGoals();
         fetchReflection();
         fetchGoogleStatus();
       }
@@ -522,6 +547,7 @@ export default function App() {
           <NavItem id="dashboard" icon={LayoutDashboard} label="Dashboard" />
           <NavItem id="tasks" icon={ListTodo} label="Tasks" />
           <NavItem id="projects" icon={FolderKanban} label="Projects" />
+          <NavItem id="goals" icon={Target} label="Goals" />
           <NavItem id="calendar" icon={CalendarIcon} label="Calendar" />
           <NavItem id="integrations" icon={Settings} label="Integrations" />
         </nav>
@@ -558,7 +584,8 @@ export default function App() {
             </h2>
             <p className="text-slate-500">
               {view === 'tasks' ? `${tasks.filter(t => t.status !== 'Done').length} tasks remaining` : 
-               view === 'projects' ? `${projects.length} active projects` : 
+               view === 'projects' ? `${projects.length} active projects` :
+               view === 'goals' ? `${goals.filter(g => g.status !== 'Completed').length} active goals` :
                view === 'integrations' ? 'Connect your external tools' :
                "Here's what's happening today"}
             </p>
@@ -577,9 +604,9 @@ export default function App() {
                 onChange={e => setSearchQuery(e.target.value)}
               />
             </div>
-            {(view === 'tasks' || view === 'projects' || view === 'calendar') && (
+            {(view === 'tasks' || view === 'projects' || view === 'goals' || view === 'calendar') && (
               <button 
-                onClick={() => view === 'projects' ? setShowProjectForm(true) : setShowTaskForm(true)}
+                onClick={() => view === 'projects' ? setShowProjectForm(true) : view === 'goals' ? setShowGoalForm(true) : setShowTaskForm(true)}
                 className="btn-primary flex items-center gap-2"
               >
                 <Plus size={20} />
@@ -675,6 +702,12 @@ export default function App() {
                             <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-violet-50 text-violet-600 border border-violet-200 flex items-center gap-1">
                               <Repeat size={10} />
                               {task.recurrence.charAt(0).toUpperCase() + task.recurrence.slice(1)}
+                            </span>
+                          )}
+                          {task.goal_name && (
+                            <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-teal-50 text-teal-600 border border-teal-200 flex items-center gap-1">
+                              <Target size={10} />
+                              {task.goal_name}
                             </span>
                           )}
                         </div>
@@ -1084,6 +1117,13 @@ export default function App() {
                         </div>
                       </div>
 
+                      {project.goal_name && (
+                        <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-teal-50 rounded-xl border border-teal-100">
+                          <Target size={14} className="text-teal-500" />
+                          <span className="text-xs font-bold text-teal-700">{project.goal_name}</span>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                           project.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
@@ -1101,6 +1141,114 @@ export default function App() {
                       </div>
                     </div>
                   ))
+                )}
+              </motion.div>
+            )}
+
+            {view === 'goals' && (
+              <motion.div 
+                key="goals"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-6xl mx-auto"
+              >
+                {goals.length === 0 ? (
+                  <div className="col-span-full text-center py-20">
+                    <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+                      <Target size={40} />
+                    </div>
+                    <h3 className="text-lg font-medium text-slate-600">No goals yet</h3>
+                    <p className="text-slate-400">Define your big-picture goals to stay focused.</p>
+                  </div>
+                ) : (
+                  goals.map(goal => {
+                    const goalProjects = projects.filter(p => p.connected_goal_id === goal.id);
+                    const goalTasks = tasks.filter(t => t.connected_goal_id === goal.id);
+                    const completedTasks = goalTasks.filter(t => t.status === 'Done').length;
+                    const totalTasks = goalTasks.length;
+                    const progress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+
+                    return (
+                      <div 
+                        key={goal.id}
+                        className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-lg transition-all flex flex-col"
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="p-3 bg-teal-50 text-teal-600 rounded-2xl">
+                            <Target size={24} />
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => { setEditingGoal(goal); setShowGoalForm(true); }}
+                              className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600"
+                            >
+                              <Edit2 size={18} />
+                            </button>
+                            <button
+                              onClick={() => deleteGoal(goal.id!)}
+                              className="p-2 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-500"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <h3 className="text-xl font-bold text-slate-800 mb-2">{goal.name}</h3>
+                        <p className="text-slate-500 text-sm mb-4 line-clamp-2 flex-1">
+                          {goal.description || "No description provided."}
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Timeframe</p>
+                            <p className="text-sm font-semibold text-slate-700">{goal.timeframe || 'Not set'}</p>
+                          </div>
+                          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Target Date</p>
+                            <p className="text-sm font-semibold text-slate-700">{goal.target_date || 'Not set'}</p>
+                          </div>
+                        </div>
+
+                        {/* Progress bar */}
+                        {totalTasks > 0 && (
+                          <div className="mb-4">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-xs font-bold text-slate-500">Task Progress</span>
+                              <span className="text-xs font-black text-teal-600">{progress}%</span>
+                            </div>
+                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${progress}%` }}
+                                className="h-full bg-teal-500"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                            goal.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
+                            goal.status === 'On Track' ? 'bg-teal-100 text-teal-700' :
+                            goal.status === 'At Risk' ? 'bg-rose-100 text-rose-700' :
+                            goal.status === 'Paused' ? 'bg-amber-100 text-amber-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {goal.status}
+                          </span>
+                          <div className="flex items-center gap-4 text-xs font-bold text-slate-400">
+                            <span className="flex items-center gap-1">
+                              <FolderKanban size={12} /> {goalProjects.length}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <ListTodo size={12} /> {totalTasks}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </motion.div>
             )}
@@ -1408,6 +1556,9 @@ export default function App() {
         <button onClick={() => setView('tasks')} className={`p-2 rounded-xl ${view === 'tasks' ? 'text-primary bg-emerald-50' : 'text-slate-400'}`}>
           <ListTodo size={24} />
         </button>
+        <button onClick={() => setView('goals')} className={`p-2 rounded-xl ${view === 'goals' ? 'text-primary bg-emerald-50' : 'text-slate-400'}`}>
+          <Target size={24} />
+        </button>
         <button onClick={() => setView('calendar')} className={`p-2 rounded-xl ${view === 'calendar' ? 'text-primary bg-emerald-50' : 'text-slate-400'}`}>
           <CalendarIcon size={24} />
         </button>
@@ -1487,6 +1638,7 @@ export default function App() {
         {showTaskForm && (
           <TaskForm 
             projects={projects}
+            goals={goals}
             initialTask={editingTask}
             onClose={() => { setShowTaskForm(false); setEditingTask(undefined); }}
             onSave={() => { setShowTaskForm(false); setEditingTask(undefined); fetchData(); }}
@@ -1495,8 +1647,16 @@ export default function App() {
         {showProjectForm && (
           <ProjectForm 
             initialProject={editingProject}
+            goals={goals}
             onClose={() => { setShowProjectForm(false); setEditingProject(undefined); }}
             onSave={() => { setShowProjectForm(false); setEditingProject(undefined); fetchData(); }}
+          />
+        )}
+        {showGoalForm && (
+          <GoalForm 
+            initialGoal={editingGoal}
+            onClose={() => { setShowGoalForm(false); setEditingGoal(undefined); }}
+            onSave={() => { setShowGoalForm(false); setEditingGoal(undefined); fetchGoals(); }}
           />
         )}
       </AnimatePresence>
