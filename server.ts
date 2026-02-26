@@ -400,14 +400,14 @@ async function startServer() {
 
   // Temporary debug endpoint - REMOVE after fixing auth
   app.get("/api/debug-env", (req, res) => {
-    const envKeys = Object.keys(process.env).filter(k => k.startsWith('FOCUSFLOW') || k === 'NODE_ENV');
+    const allKeys = Object.keys(process.env).sort();
     res.json({
-      envKeys,
+      totalEnvVars: allKeys.length,
+      allKeys,
       hasFocusflowApiKey: !!process.env.FOCUSFLOW_API_KEY,
-      apiKeyLength: process.env.FOCUSFLOW_API_KEY?.length || 0,
-      apiKeyPreview: process.env.FOCUSFLOW_API_KEY ? process.env.FOCUSFLOW_API_KEY.substring(0, 6) + '...' : 'EMPTY',
-      hasFocusflowUserEmail: !!process.env.FOCUSFLOW_USER_EMAIL,
-      userEmailPreview: process.env.FOCUSFLOW_USER_EMAIL ? process.env.FOCUSFLOW_USER_EMAIL.substring(0, 5) + '...' : 'EMPTY',
+      hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
+      hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
+      hasSessionSecret: !!process.env.SESSION_SECRET,
       nodeEnv: process.env.NODE_ENV,
     });
   });
