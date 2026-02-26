@@ -358,14 +358,17 @@ async function startServer() {
   });
 
   // Auth middleware - checks for authenticated user (session OR API key)
+  const cleanEnv = (val: string | undefined) => val?.replace(/^["']|["']$/g, '').trim();
   const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     // Check for API key auth (used by MCP server)
     const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith('Bearer ') && process.env.FOCUSFLOW_API_KEY) {
-      const token = authHeader.slice(7);
-      if (token === process.env.FOCUSFLOW_API_KEY && process.env.FOCUSFLOW_USER_EMAIL) {
+    const apiKey = cleanEnv(process.env.FOCUSFLOW_API_KEY);
+    const userEmail = cleanEnv(process.env.FOCUSFLOW_USER_EMAIL);
+    if (authHeader?.startsWith('Bearer ') && apiKey) {
+      const token = authHeader.slice(7).trim();
+      if (token === apiKey && userEmail) {
         (req as any).session = (req as any).session || {};
-        (req as any).session.userEmail = process.env.FOCUSFLOW_USER_EMAIL;
+        (req as any).session.userEmail = userEmail;
         return next();
       }
     }
