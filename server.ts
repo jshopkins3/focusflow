@@ -398,6 +398,20 @@ async function startServer() {
     next();
   };
 
+  // Temporary debug endpoint - REMOVE after fixing auth
+  app.get("/api/debug-env", (req, res) => {
+    const envKeys = Object.keys(process.env).filter(k => k.startsWith('FOCUSFLOW') || k === 'NODE_ENV');
+    res.json({
+      envKeys,
+      hasFocusflowApiKey: !!process.env.FOCUSFLOW_API_KEY,
+      apiKeyLength: process.env.FOCUSFLOW_API_KEY?.length || 0,
+      apiKeyPreview: process.env.FOCUSFLOW_API_KEY ? process.env.FOCUSFLOW_API_KEY.substring(0, 6) + '...' : 'EMPTY',
+      hasFocusflowUserEmail: !!process.env.FOCUSFLOW_USER_EMAIL,
+      userEmailPreview: process.env.FOCUSFLOW_USER_EMAIL ? process.env.FOCUSFLOW_USER_EMAIL.substring(0, 5) + '...' : 'EMPTY',
+      nodeEnv: process.env.NODE_ENV,
+    });
+  });
+
   // Current user info
   app.get("/api/auth/me", (req, res) => {
     if (!(req as any).session?.userEmail) {
