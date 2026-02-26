@@ -398,20 +398,6 @@ async function startServer() {
     next();
   };
 
-  // Temporary debug endpoint - REMOVE after fixing auth
-  app.get("/api/debug-env", (req, res) => {
-    const allKeys = Object.keys(process.env).sort();
-    res.json({
-      totalEnvVars: allKeys.length,
-      allKeys,
-      hasFocusflowApiKey: !!process.env.FOCUSFLOW_API_KEY,
-      hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
-      hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
-      hasSessionSecret: !!process.env.SESSION_SECRET,
-      nodeEnv: process.env.NODE_ENV,
-    });
-  });
-
   // Current user info
   app.get("/api/auth/me", (req, res) => {
     if (!(req as any).session?.userEmail) {
